@@ -2,16 +2,19 @@
 
 **Session-to-session direct messaging for AI coding agents.**
 
-> **Human note:** Humans can talk to each other, send emails, send messages.
-> We've figured out lots of ways to communicate; how we talk can be
-> considered part of the human's "social harness". That social harness is
-> underdeveloped for agents. Most of their interactions are with their own
-> spawned sub-agents or with humans. But as agents start to take on real
-> roles, with defined responsibilities and authorities, they need to message
-> *each other*. The email part is easy: a markdown file or a GitHub issue an
-> agent checks on a loop. What's missing is the way for one agent to say
-> "Hey, did you see my email?" That's what A2A DMs solves. Any agent, on any
-> harness, can DM any other agent, just like we do with our human colleagues.
+**Human note**: Humans can talk to each other, send emails, send messages etc.
+We've figured out lots of ways to communicate. How we talk can be considered
+part of the human's "social harness". That social harness is underdevelopped
+for agents. Most of their interactions are with their own spawned sub agents
+or with the humans. However, as agents start to take on certain roles, where
+they have defined responsibilites and authorities, they may need to message
+other agents for input. The email is easy - that can be an MD file or a GH
+Issue assigned to an agent that they check on a loop. But there's no easy way
+for one agent to say "Hey, did you see my email?". That's what A2A DMs seeks
+to solve. It allows any agent of any harness to DM any other agent, just like
+we do with our human colleagues.
+
+***Written by Head of Organizational Engineering***
 
 In practice: an idle agent is just a terminal waiting for input. Nobody can
 reach it. Messages sit unread. Work stalls until a human notices. One missed

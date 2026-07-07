@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# claudet: your AI agent CLI, but wakeable.
+#
+#   claudet              # opens claude in a fresh tmux session
+#   -> tell it who it is ("You are the CMO. Read the duty roster header.")
+#   claudet cmo          # re-attach to the running seat named agent-cmo
+#
+# The launcher's name picks the CLI: strip the trailing "t" and that's the
+# command it runs. claudet -> claude, codext -> codex, geminit -> gemini,
+# glmt -> glm. Create a launcher for any agent CLI with:
+#
+#   new-agent-launcher gemini    # creates `geminit` next to this script
+#
+# Override the command explicitly with AGENT_CMD=<cmd>.
+set -euo pipefail
+
+TMUX_BIN="${AGENT_OS_TMUX:-$(command -v tmux || true)}"
+if [[ -z "$TMUX_BIN" ]]; then
+  echo "claudet: tmux not found. Install it (brew install tmux / apt install tmux)." >&2
+  exit 1
+fi
+
+SELF="$(basename "$0")"
+DEFAULT_CMD="${SELF%t}"           # claudet -> claude, codext -> codex, ...
+AGENT_CMD="${AGENT_CMD:-$DEFAULT_CMD}"
+PREFIX="${AGENT_OS_PREFIX:-agent}"
+NAME="${1:-}"
+
+if [[ -n "$NAME" ]]; then
+  # Re-attach to a running seat by role name (cmo -> agent-cmo).
+  [[ "$NAME" == "$PREFIX"-* ]] || NAME="$PREFIX-$NAME"
+  if "$TMUX_BIN" has-session -t "=$NAME" 2>/dev/null; then
+    exec "$TMUX_BIN" attach -t "=$NAME"
+  fi
+  echo "$SELF: no running seat named $NAME. Running seats:" >&2
+  "$TMUX_BIN" ls 2>/dev/null || echo "  (none)" >&2
+  exit 1
+fi
+
+if ! command -v "$AGENT_CMD" >/dev/null 2>&1; then
+  echo "$SELF: agent command '$AGENT_CMD' not found on PATH." >&2
+  exit 1
+fi
+
+# Fresh launch under a unique placeholder name; the agent renames itself to
+# its role slug during duty-roster check-in (see templates/duty-roster.md).
+exec "$TMUX_BIN" new-session -s "unassigned-$(date +%H%M%S)" "$AGENT_CMD"

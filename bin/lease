@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# lease: promise your next check-in. The watchdog chases you if you miss it.
+#
+#   lease agent-cmo 1800          # "I'll check back within 30 minutes"
+#   lease agent-cmo 1800 off      # going off duty (watchdog leaves you alone)
+#
+# No lease = never auto-woken (doorbell-only). Write one when you are
+# actively working a queue and want a safety net under your own wake loop.
+set -euo pipefail
+
+SLUG="${1:-}"; SECS="${2:-}"; DUTY="${3:-on}"
+BASE="${AGENT_OS_DIR:-$HOME/.agent-os}"
+if [[ -z "$SLUG" || -z "$SECS" ]]; then
+  echo "usage: lease <seat-slug> <next-due-seconds> [on|off]" >&2
+  exit 2
+fi
+mkdir -p "$BASE/seats"
+node -e '
+const [slug, secs, duty, base] = process.argv.slice(1);
+const fs = require("fs");
+const now = new Date();
+const lease = {
+  slug, duty,
+  cadence_s: Number(secs),
+  next_due: new Date(now.getTime() + Number(secs) * 1000).toISOString(),
+  wrote_at: now.toISOString(),
+};
+fs.writeFileSync(`${base}/seats/${slug}.json`, JSON.stringify(lease, null, 2) + "\n");
+console.log(`lease written: ${slug} next due ${lease.next_due} (duty ${duty})`);
+' "$SLUG" "$SECS" "$DUTY" "$BASE"

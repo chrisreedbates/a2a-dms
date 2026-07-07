@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Create a wakeable launcher for any agent CLI.
+#
+#   new-agent-launcher gemini     # -> `geminit` (runs `gemini` in tmux)
+#   new-agent-launcher glm        # -> `glmt`
+#
+# The new launcher is a symlink to claudet; claudet derives the command to
+# run from its own invoked name (trailing "t" stripped).
+set -euo pipefail
+
+CMD="${1:-}"
+if [[ -z "$CMD" ]]; then
+  echo "usage: new-agent-launcher <agent-cli-command>   e.g. new-agent-launcher gemini" >&2
+  exit 2
+fi
+if ! command -v "$CMD" >/dev/null 2>&1; then
+  echo "warning: '$CMD' is not on PATH right now; creating the launcher anyway." >&2
+fi
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAUNCHER="$DIR/${CMD}t"
+ln -sf claudet "$LAUNCHER"
+echo "created: $LAUNCHER (add an alias: alias ${CMD}t='bash $LAUNCHER')"

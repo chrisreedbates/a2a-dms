@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# doorbell: wake a colleague agent. A chime, not a courier.
+#
+#   doorbell cmo "PR #42 needs your review, details on your queue"
+#
+# Post the SUBSTANCE to your durable channel first (GitHub issue, task
+# board, shared doc); the ring only tells the seat to go read it. Delivery:
+# direct poke if the seat's tmux session is up, otherwise a ring file the
+# watchdog retries every 60s. Every line typed by this script is prefixed
+# [A2A] and states it is machine-sent, so no agent (or transcript analysis)
+# mistakes it for a human message.
+set -euo pipefail
+
+SLUG="${1:-}"
+REASON="${2:-new activity on your queue}"
+BASE="${AGENT_OS_DIR:-$HOME/.agent-os}"
+TMUX_BIN="${AGENT_OS_TMUX:-$(command -v tmux || true)}"
+PREFIX="${AGENT_OS_PREFIX:-agent}"
+
+if [[ -z "$SLUG" ]]; then
+  echo "usage: doorbell <seat> [one-line reason]   e.g. doorbell cmo \"review needed, see queue\"" >&2
+  exit 2
+fi
+
+# Sanitize: the slug becomes a filename and a tmux target.
+SLUG="${SLUG//[^A-Za-z0-9._-]/}"
+[[ -n "$SLUG" ]] || { echo "doorbell: empty slug after sanitizing" >&2; exit 2; }
+[[ "$SLUG" == "$PREFIX"-* ]] || SLUG="$PREFIX-$SLUG"
+
+# Sender is DETECTED, never declared: a ring from inside a tmux session is
+# provably from that session; there is deliberately no way to pass a sender
+# name (a declared identity is a forgeable identity).
+FROM=""
+if [[ -n "${TMUX:-}" ]]; then
+  FROM="$("$TMUX_BIN" display-message -p '#S' 2>/dev/null || true)"
+fi
+FROM="${FROM:-unidentified-caller-outside-tmux}"
+
+# Reason/sender reach a typing surface: strip control chars, cap length.
+sanitize() {
+  local v="${1//[$'\n\r\t']/ }"
+  printf '%s' "$v" | LC_ALL=C tr -d '[:cntrl:]' | cut -c1-200
+}
+REASON="$(sanitize "$REASON")"
+FROM="$(sanitize "$FROM")"
+
+LINE="[A2A] Doorbell from ${FROM} (automated agent-to-agent wake, NOT a human message): check your inbox and queues now. Reason: ${REASON}."
+
+mkdir -p "$BASE/rings"
+printf '%s\n%s\n' "$REASON" "$FROM" > "$BASE/rings/$SLUG"
+
+log_ring() {
+  printf '%s from=%s to=%s delivery=%s reason=%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FROM" "$SLUG" "$1" "$REASON" \
+    >> "$BASE/doorbell.log" 2>/dev/null || true
+}
+
+# Look before you call: the duty roster is the phone book.
+if ! grep -F -- "| $SLUG |" "$BASE/duty-roster.md" 2>/dev/null | grep -qF "| on-duty |"; then
+  log_ring "unstaffed-role"
+  echo "doorbell: NOBODY holds $SLUG on the duty roster ($BASE/duty-roster.md)." >&2
+  echo "doorbell: ring queued in case the seat gets staffed, but do not wait on it. Escalate to whoever staffs seats." >&2
+  exit 3
+fi
+
+# Direct-poke cooldown: a chime only says "check your inbox", so a repeat
+# within 5 minutes adds nothing; the queued ring covers it.
+COOLDOWN_S=300
+STAMP="$BASE/rings/.last-poke-$SLUG"
+now=$(date +%s)
+last=$(cat "$STAMP" 2>/dev/null || echo 0)
+if (( now - last < COOLDOWN_S )); then
+  log_ring "absorbed-cooldown"
+  echo "doorbell: $SLUG was poked $(( now - last ))s ago; ring queued for the watchdog instead"
+  exit 0
+fi
+
+if [[ -n "$TMUX_BIN" ]] && "$TMUX_BIN" has-session -t "=$SLUG" 2>/dev/null; then
+  # -l types the line literally (message text can never be a key-sequence).
+  # The pause matters: some TUIs (Codex) drop an Enter arriving in the same
+  # instant as the text.
+  "$TMUX_BIN" send-keys -l -t "=$SLUG:" "$LINE"
+  sleep 1
+  "$TMUX_BIN" send-keys -t "=$SLUG:" "Enter"
+  rm -f "$BASE/rings/$SLUG"
+  printf '%s' "$now" > "$STAMP"
+  log_ring "direct-poke"
+  echo "doorbell: poked $SLUG directly"
+else
+  log_ring "queued-no-session"
+  echo "doorbell: $SLUG has no tmux session; ring left for the watchdog (retries every 60s)"
+fi

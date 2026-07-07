@@ -1,0 +1,6 @@
+[Unit]
+Description=claudet watchdog (one pass)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env node %h/.agent-os/bin/watchdog.mjs
